@@ -46,6 +46,8 @@ io.on("connection", (socket) => {
             }],
             createdBy: data.username,
             state: 'initial',
+            turn: data.username,
+            turnNumber: 0,
             mazo: ['asesina', 'asesina', 'asesina', 'condesa', 'condesa', 'condesa', 'duque', 'duque', 'duque', 'embajador', 'embajador', 'embajador', 'capitan', 'capitan', 'capitan']
         }
         games.push(newGame)
@@ -101,7 +103,34 @@ io.on("connection", (socket) => {
             socket.to(v.connectionId).emit("getGame", game[0])
         });
         socket.emit("getGame", game[0])
-        
+    });
+
+    // ACCIONES DEL JUEGO
+    socket.on("takeMoney", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+
+        var existUser = game[0].gamer.filter(
+            (u) => u.user == data.username
+        );
+        existUser[0].money.push(1)
+
+        // metodo next turn
+        let nextTurn = game[0].turnNumber;
+        nextTurn = nextTurn + 1
+        if(nextTurn < game[0].gamer.length) {
+            game[0].turnNumber = nextTurn
+            game[0].turn = game[0].gamer[nextTurn].user
+        } else {
+            game[0].turnNumber = 0
+            game[0].turn = game[0].gamer[0].user
+        }
+
+        game[0].gamer.forEach((v) => {
+            socket.to(v.connectionId).emit("getGame", game[0])
+        });
+        socket.emit("getGame", game[0])
     });
 
 })
@@ -114,7 +143,6 @@ function getCards (game) {
 
         const card2 = Math.floor(Math.random() * game.mazo.length);
         const nameCard2 = game.mazo[card2];
-        console.log(nameCard2);
         game.mazo.splice(card2, 1)
 
         g.cards.push(nameCard)
