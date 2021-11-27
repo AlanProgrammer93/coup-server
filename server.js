@@ -55,7 +55,6 @@ io.on("connection", (socket) => {
     });
 
     socket.on("getGame", (data) => {
-        console.log("datos que llegan al server getGame", data, "games ", games);
         try {
             var game = games.filter(
                 (g) => g.idGame == data.idGame
@@ -117,20 +116,171 @@ io.on("connection", (socket) => {
         existUser[0].money.push(1)
 
         // metodo next turn
-        let nextTurn = game[0].turnNumber;
-        nextTurn = nextTurn + 1
-        if(nextTurn < game[0].gamer.length) {
-            game[0].turnNumber = nextTurn
-            game[0].turn = game[0].gamer[nextTurn].user
-        } else {
-            game[0].turnNumber = 0
-            game[0].turn = game[0].gamer[0].user
-        }
+        handleTurn(game[0])
 
         game[0].gamer.forEach((v) => {
             socket.to(v.connectionId).emit("getGame", game[0])
         });
         socket.emit("getGame", game[0])
+    });
+
+    socket.on("useCard", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+
+        var userAttacked = game[0].gamer.filter(
+            (u) => u.user == data.username
+        );
+        var userAttacker = game[0].gamer.filter(
+            (u) => u.user == data.attacker
+        );
+
+        if(data.card === 'asesina') {
+            userAttacker[0].money.pop()
+            userAttacker[0].money.pop()
+            userAttacker[0].money.pop()
+        }
+        
+        const atack = {
+            attackedBy: data.attacker,
+            card: data.card
+        }
+        
+        socket.to(userAttacked[0].connectionId).emit("attacked", atack)
+    });
+
+    socket.on("blockCard", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+
+        var userAttacker = game[0].gamer.filter(
+            (u) => u.user == data.attacker
+        );
+
+        const block = {
+            blockedBy: data.blocker,
+            card: data.card
+        }
+        
+        socket.to(userAttacker[0].connectionId).emit("blocked", block)
+    });
+
+
+    socket.on("allow", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+
+        switch (data.card) {
+            case 'capitan':
+                var attacked = game[0].gamer.filter(
+                    (u) => u.user == data.attacked
+                );
+                var attacker = game[0].gamer.filter(
+                    (u) => u.user == data.attackedBy
+                );
+                // aqui puede fallar si tiene una sola moneda
+                attacked[0].money.pop()
+                attacked[0].money.pop()
+
+                attacker[0].money.push(1)
+                attacker[0].money.push(1)
+
+                handleTurn(game[0])
+
+                game[0].gamer.forEach((v) => {
+                    socket.to(v.connectionId).emit("getGame", game[0])
+                });
+                socket.emit("getGame", game[0])
+                break;
+
+            case 'embajador':
+                
+                break;
+            case 'duke':
+                
+                break;
+            default:
+                break;
+        }
+
+    });
+    socket.on("allowBlock", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+
+        handleTurn(game[0])
+
+        game[0].gamer.forEach((v) => {
+            socket.to(v.connectionId).emit("getGame", game[0])
+        });
+        socket.emit("getGame", game[0])
+
+    });
+
+    // LOST CARD
+    socket.on("lostCard", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+        var loser = game[0].gamer.filter(
+            (u) => u.user == data.loser
+        );
+        socket.to(loser[0].connectionId).emit("lostCard")
+    });
+    socket.on("lostCardSelected", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+        var loser = game[0].gamer.filter(
+            (u) => u.user == data.loser
+        );
+        // SI SOLO TIENE UNA CARTA DEBE COMUNICAR QUE PERDIO
+        /* loser[0].cards = loser[0].cards.filter(
+            (c) => c != data.card
+        ) */
+        loser[0].cards[0] = loser[0].cards.pop(data.card)
+        
+        handleTurn(game[0])
+
+        game[0].gamer.forEach((v) => {
+            socket.to(v.connectionId).emit("getGame", game[0])
+        });
+        socket.emit("getGame", game[0])
+    });
+
+
+    socket.on("endGame", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+        var loser = game[0].gamer.filter(
+            (u) => u.user == data.loser
+        );
+
+        game[0].gamer = game[0].gamer.filter(
+            (u) => u.user != data.loser
+        );
+
+        if(game[0].gamer.length > 1){
+            handleTurn(game[0])
+            
+            game[0].gamer.forEach((v) => {
+                socket.to(v.connectionId).emit("getGame", game[0])
+            });
+
+            socket.to(loser[0].connectionId).emit("lostGame", game[0])
+            socket.emit("getGame", game[0])
+            return
+        }
+        console.log("HAY GANADOR", game[0]);
+        console.log("socketId del ganador", game[0].gamer[0].connectionId);
+        console.log(loser[0]);
+        socket.to(loser[0].connectionId).emit("lostGame", game[0])
+        socket.emit("win", game[0])
     });
 
 })
@@ -148,4 +298,16 @@ function getCards (game) {
         g.cards.push(nameCard)
         g.cards.push(nameCard2)
     })
+}
+function handleTurn (game) {
+    let nextTurn = game.turnNumber;
+    nextTurn = nextTurn + 1
+    if(nextTurn < game.gamer.length) {
+        game.turnNumber = nextTurn
+        game.turn = game.gamer[nextTurn].user
+    } else {
+        game.turnNumber = 0
+        game.turn = game.gamer[0].user
+    }
+    return game
 }
