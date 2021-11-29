@@ -30,11 +30,6 @@ const io = require("socket.io")(server, {
 var games = [];
 io.on("connection", (socket) => {
 
-    /* socket.on("mostrarID", () => {
-        console.log("mostrando", socket.id);
-        socket.emit("mostrando", socket.id)
-    }) */
-
     socket.on("createGame", (data) => {
         let newGame = {
             idGame: data.idGame,
@@ -128,7 +123,6 @@ io.on("connection", (socket) => {
         var game = games.filter(
             (g) => g.idGame == data.idGame
         );
-
         var userAttacked = game[0].gamer.filter(
             (u) => u.user == data.username
         );
@@ -146,9 +140,46 @@ io.on("connection", (socket) => {
             attackedBy: data.attacker,
             card: data.card
         }
-        
         socket.to(userAttacked[0].connectionId).emit("attacked", atack)
     });
+
+    // Functions Cards Global
+    socket.on("useCardGlobal", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+        
+        const atack = {
+            attackedBy: data.attacker,
+            card: data.card
+        }
+
+        game[0].gamer.forEach((v) => {
+            socket.to(v.connectionId).emit("attackedGlobal", atack)
+        });
+    });
+
+    socket.on("useReturnCardAmbassador", (data) => {
+        console.log(data);
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+        var user = game[0].gamer.filter(
+            (u) => u.user == data.user
+        );
+        user[0].cards = data.cards
+        game[0].mazo.push(data.returnCard)
+
+        handleTurn(game[0])
+        console.log(game[0]);
+        
+        game[0].gamer.forEach((v) => {
+            socket.to(v.connectionId).emit("getGame", game[0])
+        });
+        socket.emit("getGame", game[0])
+    });
+
+    // End Functions Cards Global
 
     socket.on("blockCard", (data) => {
         var game = games.filter(
@@ -197,7 +228,13 @@ io.on("connection", (socket) => {
                 break;
 
             case 'embajador':
-                
+                var attacker = game[0].gamer.filter(
+                    (u) => u.user == data.attackedBy
+                );
+                const newCard = getOneCard(game[0]);
+                attacker[0].cards.push(newCard);
+
+                socket.to(attacker[0].connectionId).emit("descartOneCard", attacker[0])
                 break;
             case 'duke':
                 
@@ -207,6 +244,7 @@ io.on("connection", (socket) => {
         }
 
     });
+    
     socket.on("allowBlock", (data) => {
         var game = games.filter(
             (g) => g.idGame == data.idGame
@@ -310,4 +348,10 @@ function handleTurn (game) {
         game.turn = game.gamer[0].user
     }
     return game
+}
+function getOneCard (game) {
+    const card = Math.floor(Math.random() * game.mazo.length);
+    const nameCard = game.mazo[card];
+    game.mazo.splice(card, 1)
+    return nameCard
 }
