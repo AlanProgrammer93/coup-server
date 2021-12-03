@@ -43,9 +43,21 @@ io.on("connection", (socket) => {
             state: 'initial',
             turn: data.username,
             turnNumber: 0,
+            attackGlobal: 0,
             mazo: ['asesina', 'asesina', 'asesina', 'condesa', 'condesa', 'condesa', 'duque', 'duque', 'duque', 'embajador', 'embajador', 'embajador', 'capitan', 'capitan', 'capitan']
         }
         games.push(newGame)
+
+        var gamesInitial = games.filter(
+            (g) => g.state === 'initial'
+        );
+        socket.broadcast.emit("gameCreated", gamesInitial)
+    });
+
+    socket.on("deleteGame", (data) => {
+        games = games.filter(
+            (u) => u.idGame != data.idGame
+        );
         socket.broadcast.emit("gameCreated", games)
     });
 
@@ -60,6 +72,10 @@ io.on("connection", (socket) => {
             );
             
             if(existUser) {
+                existUser[0].connectionId = socket.id
+                game[0].gamer.forEach((v) => {
+                    socket.to(v.connectionId).emit("getGame", game[0])
+                });
                 socket.emit("getGame", game[0])
             } else {
                 socket.emit("getGame", null)
@@ -68,6 +84,13 @@ io.on("connection", (socket) => {
         } catch (error) {
             socket.emit("getGame", null)
         }
+    });
+
+    socket.on("getGames", () => {
+        var gamesInitial = games.filter(
+            (g) => g.state === 'initial' && g.gamer.length < 3
+        );
+        socket.emit("gameCreated", gamesInitial)
     });
 
     socket.on("joinGame", (data) => {
@@ -81,7 +104,17 @@ io.on("connection", (socket) => {
             money: [1,1],
             cards: []
         })
-        socket.broadcast.emit("gameCreated", games)
+
+        var gamesInitial = games.filter(
+            (g) => g.state === 'initial' && g.gamer.length < 3
+        );
+
+        socket.broadcast.emit("gameCreated", gamesInitial)
+        
+        game[0].gamer.forEach((v) => {
+            socket.to(v.connectionId).emit("getGame", game[0])
+        });
+        socket.emit("getGame", game[0])
     });
 
     socket.on("startGame", (data) => {
@@ -135,12 +168,26 @@ io.on("connection", (socket) => {
             userAttacker[0].money.pop()
             userAttacker[0].money.pop()
         }
-        
+
         const atack = {
             attackedBy: data.attacker,
             card: data.card
         }
+
+        if(data.card === 'coup') {
+            userAttacker[0].money.splice(0, 7)
+            socket.to(userAttacked[0].connectionId).emit("coup", atack)
+            return
+        }
+
+        const msg = `${data.attacker} atacó a ${data.username} con ${data.card}`
+
+        game[0].gamer.filter((u) => u.user !== data.username).forEach((v) => {
+            socket.to(v.connectionId).emit("actionOtherUser", msg)
+        });
+
         socket.to(userAttacked[0].connectionId).emit("attacked", atack)
+        
     });
 
     // Functions Cards Global
@@ -148,6 +195,8 @@ io.on("connection", (socket) => {
         var game = games.filter(
             (g) => g.idGame == data.idGame
         );
+
+        game[0].attackGlobal = 1
         
         const atack = {
             attackedBy: data.attacker,
@@ -160,7 +209,6 @@ io.on("connection", (socket) => {
     });
 
     socket.on("useReturnCardAmbassador", (data) => {
-        console.log(data);
         var game = games.filter(
             (g) => g.idGame == data.idGame
         );
@@ -171,7 +219,6 @@ io.on("connection", (socket) => {
         game[0].mazo.push(data.returnCard)
 
         handleTurn(game[0])
-        console.log(game[0]);
         
         game[0].gamer.forEach((v) => {
             socket.to(v.connectionId).emit("getGame", game[0])
@@ -190,14 +237,31 @@ io.on("connection", (socket) => {
             (u) => u.user == data.attacker
         );
 
+        if(data.card === 'duque') {
+            game[0].attackGlobal = 0
+        }
+
         const block = {
             blockedBy: data.blocker,
             card: data.card
         }
+
+        const msg = `${data.blocker} bloqueo a ${data.attacker} con ${data.card}`
+
+        game[0].gamer.filter((u) => u.user !== data.attacker).forEach((v) => {
+            socket.to(v.connectionId).emit("actionOtherUser", msg)
+        });
         
         socket.to(userAttacker[0].connectionId).emit("blocked", block)
     });
 
+    socket.on("blockCardAttackGlobal", (data) => {
+        var game = games.filter(
+            (g) => g.idGame == data.idGame
+        );
+
+        game[0].attackGlobal = 0
+    });
 
     socket.on("allow", (data) => {
         var game = games.filter(
@@ -212,13 +276,18 @@ io.on("connection", (socket) => {
                 var attacker = game[0].gamer.filter(
                     (u) => u.user == data.attackedBy
                 );
-                // aqui puede fallar si tiene una sola moneda
-                attacked[0].money.pop()
-                attacked[0].money.pop()
-
-                attacker[0].money.push(1)
-                attacker[0].money.push(1)
-
+                
+                if(attacked[0].money.length < 2) {
+                    attacked[0].money.pop()
+                    attacker[0].money.push(1)
+                } else {
+                    attacked[0].money.pop()
+                    attacked[0].money.pop()
+    
+                    attacker[0].money.push(1)
+                    attacker[0].money.push(1)
+                }
+                
                 handleTurn(game[0])
 
                 game[0].gamer.forEach((v) => {
@@ -228,15 +297,34 @@ io.on("connection", (socket) => {
                 break;
 
             case 'embajador':
-                var attacker = game[0].gamer.filter(
-                    (u) => u.user == data.attackedBy
-                );
-                const newCard = getOneCard(game[0]);
-                attacker[0].cards.push(newCard);
-
-                socket.to(attacker[0].connectionId).emit("descartOneCard", attacker[0])
+                if(game[0].attackGlobal) {
+                    var attacker = game[0].gamer.filter(
+                        (u) => u.user == data.attackedBy
+                    );
+                    const newCard = getOneCard(game[0]);
+                    attacker[0].cards.push(newCard);
+    
+                    socket.to(attacker[0].connectionId).emit("descartOneCard", attacker[0])
+                    game[0].attackGlobal = 0
+                }
                 break;
-            case 'duke':
+            case 'duque':
+                if(game[0].attackGlobal) {
+                    var attacker = game[0].gamer.filter(
+                        (u) => u.user == data.attackedBy
+                    );
+                    attacker[0].money.push(1);
+                    attacker[0].money.push(1);
+                    attacker[0].money.push(1);
+    
+                    handleTurn(game[0])
+    
+                    game[0].gamer.forEach((v) => {
+                        socket.to(v.connectionId).emit("getGame", game[0])
+                    });
+                    socket.emit("getGame", game[0])
+                    game[0].attackGlobal = 0
+                }
                 
                 break;
             default:
@@ -244,12 +332,12 @@ io.on("connection", (socket) => {
         }
 
     });
-    
+
     socket.on("allowBlock", (data) => {
         var game = games.filter(
             (g) => g.idGame == data.idGame
         );
-
+        game[0].attackGlobal = 0
         handleTurn(game[0])
 
         game[0].gamer.forEach((v) => {
@@ -276,17 +364,18 @@ io.on("connection", (socket) => {
         var loser = game[0].gamer.filter(
             (u) => u.user == data.loser
         );
-        // SI SOLO TIENE UNA CARTA DEBE COMUNICAR QUE PERDIO
-        /* loser[0].cards = loser[0].cards.filter(
-            (c) => c != data.card
-        ) */
+        
+        if(loser[0].cards.length === 1) {
+            socket.to(loser[0].connectionId).emit("lostGame", game[0])
+        }
+
         loser[0].cards[0] = loser[0].cards.pop(data.card)
         
         handleTurn(game[0])
 
         game[0].gamer.forEach((v) => {
             socket.to(v.connectionId).emit("getGame", game[0])
-        });
+        }); 
         socket.emit("getGame", game[0])
     });
 
@@ -311,14 +400,23 @@ io.on("connection", (socket) => {
             });
 
             socket.to(loser[0].connectionId).emit("lostGame", game[0])
-            socket.emit("getGame", game[0])
+
+            if(loser[0].connectionId === socket.id) {
+                socket.emit("lostGame", game[0])
+            } else {
+                socket.emit("getGame", game[0])
+            }
+            
             return
         }
-        console.log("HAY GANADOR", game[0]);
-        console.log("socketId del ganador", game[0].gamer[0].connectionId);
-        console.log(loser[0]);
-        socket.to(loser[0].connectionId).emit("lostGame", game[0])
-        socket.emit("win", game[0])
+
+        if(loser[0].connectionId === socket.id) {
+            socket.emit("lostGame", game[0])
+            socket.to(game[0].gamer[0].connectionId).emit("win", game[0])
+        } else {
+            socket.emit("win", game[0])
+            socket.to(loser[0].connectionId).emit("lostGame", game[0])
+        }
     });
 
 })
