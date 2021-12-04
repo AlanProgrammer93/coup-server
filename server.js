@@ -177,6 +177,11 @@ io.on("connection", (socket) => {
         if(data.card === 'coup') {
             userAttacker[0].money.splice(0, 7)
             socket.to(userAttacked[0].connectionId).emit("coup", atack)
+
+            const msg = `${data.attacker} atacó a ${data.username} con ${data.card}`
+            game[0].gamer.filter((u) => u.user !== data.username).forEach((v) => {
+                socket.to(v.connectionId).emit("actionOtherUser", msg)
+            });
             return
         }
 
