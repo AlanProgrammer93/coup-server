@@ -5,6 +5,7 @@ const User = require('../models/User')
 
 exports.register = async (req, res) => {
     const { username, password } = req.body;
+
     let user = await User.findOne({ username });
 
     if (!username || !password) {
@@ -32,6 +33,7 @@ exports.register = async (req, res) => {
             { expiresIn: '2d' },
             (err, token) => {
                 if (err) throw err;
+
                 res.status(200).json({
                     msg: 'Usuario Creado Correctamente',
                     username: user.username,

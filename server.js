@@ -37,6 +37,7 @@ var games = [];
 io.on("connection", (socket) => {
 
     socket.on("createGame", (data) => {
+        
         let newGame = {
             idGame: data.idGame,
             gamer: [{
