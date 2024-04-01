@@ -13,9 +13,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-app.get('*', function (request, response){
+/* app.get('*', function (request, response){
   response.sendFile(path.resolve(__dirname, 'public', 'index.html'))
-})
+}) */
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
