@@ -373,6 +373,7 @@ io.on("connection", (socket) => {
         var game = games.filter(
             (g) => g.idGame == data.idGame
         );
+        
         var loser = game[0].gamer.filter(
             (u) => u.user == data.loser
         );
@@ -381,8 +382,8 @@ io.on("connection", (socket) => {
             socket.to(loser[0].connectionId).emit("lostGame", game[0])
         }
 
-        loser[0].cards[0] = loser[0].cards.pop(data.card)
-        
+        loser[0].cards = loser[0].cards.filter(d => d !== data.card)
+
         handleTurn(game[0])
 
         game[0].gamer.forEach((v) => {
@@ -459,6 +460,7 @@ function handleTurn (game) {
     }
     return game
 }
+
 function getOneCard (game) {
     const card = Math.floor(Math.random() * game.mazo.length);
     const nameCard = game.mazo[card];

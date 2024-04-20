@@ -15,7 +15,7 @@ exports.register = async (req, res) => {
     }
 
     if (user) {
-        return res.status(401).json({
+        return res.status(400).json({
             msg: 'Existe una cuenta con ese nombre de usuario.'
         });
     }
