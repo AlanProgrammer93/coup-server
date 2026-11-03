@@ -382,7 +382,14 @@ io.on("connection", (socket) => {
             socket.to(loser[0].connectionId).emit("lostGame", game[0])
         }
 
-        loser[0].cards = loser[0].cards.filter(d => d !== data.card)
+        const index = loser[0].cards.findIndex(d => d === data.card);
+
+        if (index !== -1) {
+            loser[0].cards.splice(index, 1);
+        }
+
+
+        // loser[0].cards = loser[0].cards.filter(d => d !== data.card)
 
         handleTurn(game[0])
 
